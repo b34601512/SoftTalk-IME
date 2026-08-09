@@ -47,6 +47,8 @@ temp/
 downloads/
 
 # 构建和发布产物
+**/bin/
+**/obj/
 build/
 dist/
 out/
