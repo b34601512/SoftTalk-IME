@@ -21,10 +21,24 @@ if (-not (Test-Path -LiteralPath $regsvr32 -PathType Leaf)) {
     throw "找不到系统注册工具：$regsvr32"
 }
 
+function Assert-Administrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        throw "注册输入法需要管理员权限，请用‘以管理员身份运行’的 PowerShell 启动安装。"
+    }
+}
+
+function Invoke-Regsvr32([string[]]$Arguments) {
+    $process = Start-Process -FilePath $regsvr32 -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
+    return $process.ExitCode
+}
+
 if ($PSCmdlet.ShouldProcess("$dllPath; $resolvedTsfCliPath", "注册 SoftTalk-IME TSF COM Host 与官方语言 Profile")) {
-    & $regsvr32 /s $dllPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "regsvr32 注册失败，退出码：$LASTEXITCODE"
+    Assert-Administrator
+    $regsvr32ExitCode = Invoke-Regsvr32 @("/s", $dllPath)
+    if ($regsvr32ExitCode -ne 0) {
+        throw "regsvr32 注册失败，退出码：$regsvr32ExitCode"
     }
 
     try {
@@ -34,7 +48,7 @@ if ($PSCmdlet.ShouldProcess("$dllPath; $resolvedTsfCliPath", "注册 SoftTalk-IM
         }
     }
     catch {
-        & $regsvr32 /u /s $dllPath
+        [void](Invoke-Regsvr32 @("/u", "/s", $dllPath))
         throw
     }
 

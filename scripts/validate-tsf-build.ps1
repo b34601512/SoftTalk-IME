@@ -70,5 +70,11 @@ if ($verifySource -notmatch "0x00000804" -or $verifySource -match "New-Item|Remo
 if ($registerSource -notmatch "SupportsShouldProcess" -or $unregisterSource -notmatch "SupportsShouldProcess") {
     throw "TSF 注册/卸载脚本缺少 WhatIf 安全开关。"
 }
+if ($registerSource -notmatch "IsInRole.*Administrator" -or $unregisterSource -notmatch "IsInRole.*Administrator") {
+    throw "TSF 注册/卸载脚本缺少管理员权限检查。"
+}
+if ($registerSource -notmatch "Start-Process" -or $unregisterSource -notmatch "Start-Process") {
+    throw "TSF 注册/卸载脚本没有使用可检查退出码的 regsvr32 调用。"
+}
 
 Write-Output "TSF_BUILD_VALIDATED: $resolvedPublishDir"

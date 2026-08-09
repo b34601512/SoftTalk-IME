@@ -46,6 +46,8 @@ scripts\validate-tsf-build.ps1
 
 注册脚本按官方流程使用管理员权限注册系统级 TSF；它会先注册 COM Host，再调用 TSF 官方接口登记文本服务、简体中文 Profile 和键盘类别。注册动作会修改系统状态，CLI 自测不会执行注册。
 
+正式安装包必须把注册作为安装步骤，并以管理员权限运行；用户不需要手动执行注册命令。卸载包必须执行对应的卸载步骤，避免留下系统输入法项。
+
 `probe-registration` 只读创建并检查 TSF 官方 COM 管理器；`register --apply` 和 `unregister --apply` 才会调用官方注册接口并修改系统状态，未传 `--apply` 会拒绝执行。当前自动化测试只运行探测，不执行系统注册。
 
 完成一次系统注册后，可运行 `scripts\verify-tsf-registration.ps1` 做只读验收；它只检查 COM 路径、CLSID、简体中文 LANGID 和 Profile GUID。

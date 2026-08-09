@@ -18,16 +18,30 @@ if (-not (Test-Path -LiteralPath $regsvr32 -PathType Leaf)) {
     throw "找不到系统注册工具：$regsvr32"
 }
 
+function Assert-Administrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        throw "卸载输入法需要管理员权限，请用‘以管理员身份运行’的 PowerShell 启动卸载。"
+    }
+}
+
+function Invoke-Regsvr32([string[]]$Arguments) {
+    $process = Start-Process -FilePath $regsvr32 -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
+    return $process.ExitCode
+}
+
 if ($PSCmdlet.ShouldProcess("$dllPath; $resolvedTsfCliPath", "卸载 SoftTalk-IME TSF 官方语言 Profile 与 COM Host")) {
+    Assert-Administrator
     & $resolvedTsfCliPath unregister --apply
     if ($LASTEXITCODE -ne 0) {
         throw "TSF 官方卸载失败，退出码：$LASTEXITCODE"
     }
 
     if (Test-Path -LiteralPath $dllPath -PathType Leaf) {
-        & $regsvr32 /u /s $dllPath
-        if ($LASTEXITCODE -ne 0) {
-            throw "regsvr32 卸载失败，退出码：$LASTEXITCODE"
+        $regsvr32ExitCode = Invoke-Regsvr32 @("/u", "/s", $dllPath)
+        if ($regsvr32ExitCode -ne 0) {
+            throw "regsvr32 卸载失败，退出码：$regsvr32ExitCode"
         }
     }
 
