@@ -14,8 +14,12 @@ public sealed record SyncHead(IReadOnlyDictionary<string, long> LatestByScope)
         var latestByScope = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in scopes.EnumerateObject())
         {
-            var value = ReadNonNegativeLong(property.Value, $"scopes.{property.Name}");
-            latestByScope[property.Name] = value;
+            var value = property.Value.ValueKind == JsonValueKind.Object
+                && property.Value.TryGetProperty("latest_seq", out var latestSequence)
+                ? latestSequence
+                : property.Value;
+            var sequence = ReadNonNegativeLong(value, $"scopes.{property.Name}.latest_seq");
+            latestByScope[property.Name] = sequence;
         }
 
         return new SyncHead(latestByScope);

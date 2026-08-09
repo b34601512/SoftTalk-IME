@@ -19,7 +19,7 @@
 - `KnowledgeUsageStatisticsStore`：只在成功插入后记录本地选词次数；排序先看相关性，再看使用次数。
 - `PinyinIndexBuilder`：只在 IME 本地生成全拼和首字母派生索引；优先使用协议字段，旧快照自动回退，不复制客户端 FTS。
 - `PinyinNet 1.0.0`：固定为 MIT 许可的最小拼音转换依赖，仅用于生成本地派生索引。
-- `src/SoftTalkIme.Cli`：CLI 自测和快照检索入口，供自动化测试使用。
+- `src/SoftTalkIme.Cli`：CLI 自测、数据源诊断、立即同步和快照检索入口，供自动化测试使用。
 - `src/SoftTalkIme.Tsf`：Windows TSF COM Host；负责接收键盘事件、显示候选窗口并向当前文本框插入结果。
 - `scripts/register-tsf.ps1`：注册 TSF（会修改系统注册表，测试阶段不要直接运行）。
 - `scripts/unregister-tsf.ps1`：卸载 TSF。
@@ -35,7 +35,18 @@
 3. `dotnet run --project src/SoftTalkIme.Tsf.Cli/SoftTalkIme.Tsf.Cli.csproj --configuration Release -p:Platform=x64 -- self-test`
 4. `dotnet run --project src/SoftTalkIme.Tsf.Cli/SoftTalkIme.Tsf.Cli.csproj --configuration Release -p:Platform=x64 -- probe-registration`
 
-TSF 层当前采用最小可验证交互：切换到 SoftTalk-IME 后按 `Ctrl+Shift+Space` 进入话术模式，输入英文检索词，候选窗口显示相关话术，按 `Enter`/`Space` 输出第一条结果，按 `F1-F9` 选择候选，按 `Esc` 取消。首个字母无命中时交还普通输入；已有查询继续输入后无命中，会把完整查询插回当前应用。候选窗口代码和每分钟只读同步已接入；开发机的系统注册已通过只读核验，尚未完成系统切换与人工输入框实测，Issue #5 保持开放。
+TSF 层切换到 SoftTalk-IME 后可直接输入拼音；命中候选时自动接管字母，候选窗口显示相关话术，按 `Enter`/`Space` 输出第一条结果，按 `F1-F9` 选择候选，按 `Esc` 取消。首个字母无命中时交还普通输入；已有查询继续输入后无命中，会把完整查询插回当前应用。`Ctrl+Shift+Space` 仍可作为手动进入话术模式的快捷键。
+
+IME 默认优先读取客户端的 `%USERPROFILE%\SoftTalk\public.db` 中的在线登录态，令牌只在进程内解密使用，不读取客户端业务数据库、不写回知识库；也可显式设置 `SOFTTALK_IME_SYNC_BASE_URL` 和 `SOFTTALK_IME_SYNC_TOKEN` 覆盖自动发现。同步仍遵循“检查版本，有变化才增量同步”，同步失败保留旧快照。
+
+首次排查“只能输入英文”可运行：
+
+```powershell
+dotnet run --project src/SoftTalkIme.Cli/SoftTalkIme.Cli.csproj --configuration Release -- diagnose
+dotnet run --project src/SoftTalkIme.Cli/SoftTalkIme.Cli.csproj --configuration Release -- sync-now
+```
+
+看到 `sync_ready=True` 后，重新切换一次 SoftTalk-IME；它的中文输出来自知识库话术候选，不是通用汉字词库。
 
 发布 TSF COM Host：
 
@@ -52,7 +63,7 @@ scripts\validate-tsf-build.ps1
 
 完成一次系统注册后，可运行 `scripts\verify-tsf-registration.ps1` 做只读验收；它只检查 COM 路径、CLSID、简体中文 LANGID 和 Profile GUID。
 
-TSF 激活后只有在进程环境中同时存在以下两个变量时，才会启动每分钟只读同步；缺少任意一个变量时只使用本地快照：
+TSF 激活后会自动发现客户端登录态并启动每分钟只读同步；如果需要显式指定独立的只读数据源，可同时设置以下两个变量：
 
 ```powershell
 $env:SOFTTALK_IME_SYNC_BASE_URL = "https://你的同步服务地址"

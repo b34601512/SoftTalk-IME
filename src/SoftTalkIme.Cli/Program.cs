@@ -18,6 +18,8 @@ internal static class SoftTalkImeCli
             {
                 "self-test" => RunSelfTest(),
                 "search" => RunSearch(args.Skip(1).ToArray()),
+                "diagnose" => RunDiagnose(args.Skip(1).ToArray()),
+                "sync-now" => RunSyncNow(args.Skip(1).ToArray()),
                 "help" or "--help" or "-h" => PrintHelp(),
                 _ => Fail($"未知命令：{command}"),
             };
@@ -54,11 +56,65 @@ internal static class SoftTalkImeCli
         return 0;
     }
 
+    private static int RunDiagnose(string[] args)
+    {
+        var snapshotPath = ResolveSnapshotPath(args.FirstOrDefault());
+        var snapshot = new KnowledgeSnapshotStore().LoadOrEmpty(snapshotPath);
+        SoftTalkImeSyncConnectionResolver.TryResolve(out var connection, out var probe);
+        Console.WriteLine($"snapshot_path={snapshotPath}");
+        Console.WriteLine($"snapshot_exists={File.Exists(snapshotPath)}");
+        Console.WriteLine($"snapshot_entries={snapshot.Entries.Count}");
+        Console.WriteLine($"sync_source={probe.Source}");
+        Console.WriteLine($"sync_base_url={probe.BaseUrl}");
+        Console.WriteLine($"client_public_db_exists={probe.ClientDatabaseExists}");
+        Console.WriteLine($"client_token_present={probe.TokenPresent}");
+        Console.WriteLine($"sync_ready={probe.Ready}");
+        Console.WriteLine($"sync_reason={probe.Reason}");
+        return connection is null ? 1 : 0;
+    }
+
+    private static int RunSyncNow(string[] args)
+    {
+        var snapshotPath = ResolveSnapshotPath(args.FirstOrDefault());
+        if (!SoftTalkImeSyncConnectionResolver.TryResolve(out var connection, out var probe)
+            || connection is null)
+        {
+            return Fail($"只读同步未就绪：{probe.Reason}");
+        }
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(connection.BaseUrl),
+            Timeout = TimeSpan.FromSeconds(20),
+        };
+        var transport = new HttpReadOnlyKnowledgeSyncTransport(client, connection.Token, "SoftTalk-IME.CLI");
+        var worker = new KnowledgeSyncWorker(
+            new KnowledgeSyncCoordinator(transport),
+            new KnowledgeSnapshotStore(),
+            snapshotPath);
+        var result = worker.PollAndSaveAsync().GetAwaiter().GetResult();
+        Console.WriteLine($"SYNC_NOW_PASSED entries={result.Snapshot.Entries.Count} pulled={result.PulledRecords} updated_scopes={result.UpdatedScopes.Count}");
+        return 0;
+    }
+
+    private static string ResolveSnapshotPath(string? configuredPath)
+    {
+        return string.IsNullOrWhiteSpace(configuredPath)
+            ? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SoftTalk",
+                "IME",
+                "knowledge.snapshot.json")
+            : Path.GetFullPath(configuredPath);
+    }
+
     private static int PrintHelp()
     {
         Console.WriteLine("SoftTalk-IME CLI");
         Console.WriteLine("  self-test                         运行无需 GUI 的核心自测");
         Console.WriteLine("  search <snapshot.json> <query>   检索本地话术快照");
+        Console.WriteLine("  diagnose [snapshot.json]          检查本地快照和只读数据源");
+        Console.WriteLine("  sync-now [snapshot.json]          立即执行一次只读同步");
         return 0;
     }
 
@@ -84,11 +140,12 @@ internal static class CliSelfTests
         TestHttpTransportIsReadOnly();
         TestSyncWorkerKeepsOldSnapshotOnFailure();
         TestUsageStatisticsAndRanking();
+        TestSyncConnectionResolver();
     }
 
     private static void TestSyncHeadDecision()
     {
-        using var document = JsonDocument.Parse("{\"scopes\":{\"team_phrases\":5,\"private_phrases\":2}}");
+        using var document = JsonDocument.Parse("{\"scopes\":{\"team_phrases\":{\"latest_seq\":5},\"private_phrases\":{\"latest_seq\":2}}}");
         var snapshot = new KnowledgeSnapshot();
         snapshot.ScopeSequences[SyncConstants.TeamScope] = 4;
         snapshot.ScopeSequences[SyncConstants.PrivateScope] = 2;
@@ -341,6 +398,37 @@ internal static class CliSelfTests
             {
                 Directory.Delete(directory, recursive: true);
             }
+        }
+    }
+
+    private static void TestSyncConnectionResolver()
+    {
+        const string baseUrlName = "SOFTTALK_IME_SYNC_BASE_URL";
+        const string tokenName = "SOFTTALK_IME_SYNC_TOKEN";
+        const string databaseName = "SOFTTALK_IME_CLIENT_PUBLIC_DB";
+        var oldBaseUrl = Environment.GetEnvironmentVariable(baseUrlName);
+        var oldToken = Environment.GetEnvironmentVariable(tokenName);
+        var oldDatabase = Environment.GetEnvironmentVariable(databaseName);
+        try
+        {
+            Environment.SetEnvironmentVariable(baseUrlName, "https://sync.example.test/");
+            Environment.SetEnvironmentVariable(tokenName, "test-only-token");
+            Environment.SetEnvironmentVariable(databaseName, Path.Combine(Path.GetTempPath(), "missing-public.db"));
+            var ready = SoftTalkImeSyncConnectionResolver.TryResolve(out var connection, out var probe);
+            Assert(ready && connection is not null, "显式只读同步配置未被识别");
+            Assert(connection!.BaseUrl == "https://sync.example.test", "同步地址未规范化");
+            Assert(connection.Source == "environment", "显式配置来源错误");
+            Assert(probe.TokenPresent, "同步探测未识别令牌存在");
+
+            var missingProbe = SoftTalkImeSyncConnectionResolver.ProbeClientAuth(
+                Path.Combine(Path.GetTempPath(), $"SoftTalkImeMissing-{Guid.NewGuid():N}.db"));
+            Assert(!missingProbe.Ready && missingProbe.Reason == "client_public_db_missing", "缺失客户端数据库诊断错误");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(baseUrlName, oldBaseUrl);
+            Environment.SetEnvironmentVariable(tokenName, oldToken);
+            Environment.SetEnvironmentVariable(databaseName, oldDatabase);
         }
     }
 

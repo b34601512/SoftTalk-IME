@@ -70,9 +70,17 @@ static int RunSelfTest()
     candidateList.GetCount(out count);
     candidateList.GetSelection(out selection);
     Assert(count == 0 && selection == 0, "候选清空状态错误");
+    TestAutoActivation();
     TestNoHitFallsBackToNormalInput();
     Console.WriteLine("TSF_CANDIDATE_SELF_TEST_PASSED");
     return 0;
+}
+
+static void TestAutoActivation()
+{
+    Assert(TsfInputActivationPolicy.ShouldAutoArm('T', hasMatches: true), "命中拼音首字母后未自动进入输入状态");
+    Assert(!TsfInputActivationPolicy.ShouldAutoArm('T', hasMatches: false), "无命中时错误接管普通英文输入");
+    Assert(!TsfInputActivationPolicy.ShouldAutoArm('t', hasMatches: true), "小写虚拟键错误触发自动接管");
 }
 
 static void TestNoHitFallsBackToNormalInput()

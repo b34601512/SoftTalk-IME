@@ -178,6 +178,13 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
             return TsfHResults.SOk;
         }
 
+        if (!_sessionArmed && key is >= 'A' and <= 'Z')
+        {
+            _sessionArmed = TsfInputActivationPolicy.ShouldAutoArm(
+                key,
+                SearchHits(char.ToLowerInvariant((char)key).ToString()).Count > 0);
+        }
+
         if (!_sessionArmed)
         {
             return TsfHResults.SOk;
@@ -365,10 +372,9 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
 
     private static (KnowledgeSyncWorker? Worker, HttpClient? Client) CreateSyncWorker(string snapshotPath)
     {
-        var baseUrl = Environment.GetEnvironmentVariable("SOFTTALK_IME_SYNC_BASE_URL");
-        var token = Environment.GetEnvironmentVariable("SOFTTALK_IME_SYNC_TOKEN");
-        if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(token)
-            || !Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseAddress))
+        if (!SoftTalkImeSyncConnectionResolver.TryResolve(out var connection, out _)
+            || connection is null
+            || !Uri.TryCreate(connection.BaseUrl, UriKind.Absolute, out var baseAddress))
         {
             return (null, null);
         }
@@ -378,7 +384,7 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
             BaseAddress = baseAddress,
             Timeout = TimeSpan.FromSeconds(20),
         };
-        var transport = new HttpReadOnlyKnowledgeSyncTransport(client, token);
+        var transport = new HttpReadOnlyKnowledgeSyncTransport(client, connection.Token);
         var worker = new KnowledgeSyncWorker(
             new KnowledgeSyncCoordinator(transport),
             new KnowledgeSnapshotStore(),
@@ -515,7 +521,9 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
     {
         if (!_sessionArmed)
         {
-            return false;
+            return TsfInputActivationPolicy.ShouldAutoArm(
+                key,
+                SearchHits(char.ToLowerInvariant((char)key).ToString()).Count > 0);
         }
 
         if (key is >= 'A' and <= 'Z')
