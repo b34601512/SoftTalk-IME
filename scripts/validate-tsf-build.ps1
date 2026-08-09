@@ -61,6 +61,9 @@ if ($registerSource -notmatch $expectedPublishSegment -or $unregisterSource -not
 if ($registerSource -notmatch "TsfCliPath" -or $unregisterSource -notmatch "TsfCliPath") {
     throw "TSF 注册/卸载脚本没有接入官方注册 CLI。"
 }
+if ($registerSource -notmatch "SoftTalkIme.Tsf.Cli.exe" -or $unregisterSource -notmatch "SoftTalkIme.Tsf.Cli.exe") {
+    throw "TSF 注册/卸载脚本没有支持安装包内置 CLI。"
+}
 if ($registerSource -notmatch "register --apply" -or $unregisterSource -notmatch "unregister --apply") {
     throw "TSF 注册/卸载脚本没有调用官方注册/卸载命令。"
 }

@@ -1,12 +1,21 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [string]$PublishDir = (Join-Path $PSScriptRoot "..\src\SoftTalkIme.Tsf\bin\Release\net8.0-windows\publish"),
-    [string]$TsfCliPath = (Join-Path $PSScriptRoot "..\src\SoftTalkIme.Tsf.Cli\bin\x64\Release\net8.0-windows\SoftTalkIme.Tsf.Cli.exe")
+    [string]$TsfCliPath = ""
 )
 
 $ErrorActionPreference = "Stop"
 $resolvedPublishDir = Resolve-Path -LiteralPath $PublishDir -ErrorAction Stop
 $dllPath = Join-Path $resolvedPublishDir "SoftTalkIme.Tsf.comhost.dll"
+if ([string]::IsNullOrWhiteSpace($TsfCliPath)) {
+    $bundledTsfCliPath = Join-Path $resolvedPublishDir "SoftTalkIme.Tsf.Cli.exe"
+    $TsfCliPath = if (Test-Path -LiteralPath $bundledTsfCliPath -PathType Leaf) {
+        $bundledTsfCliPath
+    }
+    else {
+        Join-Path $PSScriptRoot "..\src\SoftTalkIme.Tsf.Cli\bin\x64\Release\net8.0-windows\SoftTalkIme.Tsf.Cli.exe"
+    }
+}
 $resolvedTsfCliPath = Resolve-Path -LiteralPath $TsfCliPath -ErrorAction Stop
 
 if (-not (Test-Path -LiteralPath $resolvedTsfCliPath -PathType Leaf)) {

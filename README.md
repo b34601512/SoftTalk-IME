@@ -44,7 +44,7 @@ dotnet publish src/SoftTalkIme.Tsf/SoftTalkIme.Tsf.csproj --configuration Releas
 scripts\validate-tsf-build.ps1
 ```
 
-注册脚本按官方流程使用管理员权限注册系统级 TSF；它会先注册 COM Host，再调用 TSF 官方接口登记文本服务、简体中文 Profile 和键盘类别。注册动作会修改系统状态，CLI 自测不会执行注册。
+注册脚本按官方流程使用管理员权限注册系统级 TSF；它会先注册 COM Host，再调用 TSF 官方接口登记文本服务、简体中文 Profile 和键盘类别。注册动作会修改系统状态，CLI 自测不会执行注册。打包时把 `SoftTalkIme.Tsf.Cli.exe` 放在 COM Host 的 publish 目录中，脚本会优先使用包内 CLI。
 
 正式安装包必须把注册作为安装步骤，并以管理员权限运行；用户不需要手动执行注册命令。卸载包必须执行对应的卸载步骤，避免留下系统输入法项。
 
