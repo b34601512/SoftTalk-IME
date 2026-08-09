@@ -74,6 +74,7 @@ internal static class CliSelfTests
     {
         TestSyncHeadDecision();
         TestSnapshotReducerAndSearch();
+        TestPinyinSearchFallback();
         TestSnapshotDelete();
         TestAtomicSnapshotStore();
         TestPollInterval();
@@ -117,6 +118,35 @@ internal static class CliSelfTests
         """);
         var next = KnowledgeSnapshotReducer.ApplyPage(snapshot, SyncConstants.TeamScope, deletion.RootElement);
         Assert(next.Entries.Count == 0, "删除同步记录未从本地快照移除");
+    }
+
+    private static void TestPinyinSearchFallback()
+    {
+        using var document = JsonDocument.Parse(SamplePageJson());
+        var snapshot = KnowledgeSnapshotReducer.ApplyPage(new KnowledgeSnapshot(), SyncConstants.TeamScope, document.RootElement);
+        var entry = snapshot.Entries["faq-1"];
+        Assert(entry.PinyinIndexText.Contains("tuikuanz", StringComparison.Ordinal), "同步缺少本地全拼索引");
+        Assert(entry.PinyinIndexText.Contains("tkzmcl", StringComparison.Ordinal), "同步缺少本地首字母索引");
+        Assert(KnowledgeSearchEngine.Search(snapshot, "tuikuan").Count == 1, "全拼检索失败");
+        Assert(KnowledgeSearchEngine.Search(snapshot, "tk").Count == 1, "首字母检索失败");
+
+        var legacySnapshot = new KnowledgeSnapshot();
+        legacySnapshot.Entries["legacy"] = new KnowledgeEntry(
+            "legacy", "退款怎么处理", "请提供订单号", "", "team", 0, 1);
+        Assert(KnowledgeSearchEngine.Search(legacySnapshot, "tuikuan").Count == 1, "旧快照拼音回退失败");
+
+        using var remoteIndexDocument = JsonDocument.Parse("""
+        {
+          "table_batches": [{ "table_name": "st_faq", "records": [
+            { "uuid": "remote", "question": "退款", "answer": "处理", "pinyin_index_text": "custom-index" }
+          ]}]
+        }
+        """);
+        var remoteIndexSnapshot = KnowledgeSnapshotReducer.ApplyPage(
+            new KnowledgeSnapshot(),
+            SyncConstants.TeamScope,
+            remoteIndexDocument.RootElement);
+        Assert(remoteIndexSnapshot.Entries["remote"].PinyinIndexText == "custom-index", "远端拼音索引未优先使用");
     }
 
     private static void TestAtomicSnapshotStore()

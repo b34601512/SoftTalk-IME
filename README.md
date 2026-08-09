@@ -17,6 +17,8 @@
 - `src/SoftTalkIme.Core`：只读同步、本地快照、候选检索；不包含任何知识库写入接口。
 - `KnowledgeSyncWorker`：每分钟检查版本，有变化才拉取并原子保存本地快照；同步失败保留旧快照。
 - `KnowledgeUsageStatisticsStore`：只在成功插入后记录本地选词次数；排序先看相关性，再看使用次数。
+- `PinyinIndexBuilder`：只在 IME 本地生成全拼和首字母派生索引；优先使用协议字段，旧快照自动回退，不复制客户端 FTS。
+- `PinyinNet 1.0.0`：固定为 MIT 许可的最小拼音转换依赖，仅用于生成本地派生索引。
 - `src/SoftTalkIme.Cli`：CLI 自测和快照检索入口，供自动化测试使用。
 - `src/SoftTalkIme.Tsf`：Windows TSF COM Host；负责接收键盘事件、显示候选窗口并向当前文本框插入结果。
 - `scripts/register-tsf.ps1`：注册 TSF（会修改系统注册表，测试阶段不要直接运行）。
@@ -42,9 +44,11 @@ dotnet publish src/SoftTalkIme.Tsf/SoftTalkIme.Tsf.csproj --configuration Releas
 scripts\validate-tsf-build.ps1
 ```
 
-注册脚本默认使用管理员权限所需的 HKLM；开发机可传 `-CurrentUser` 做当前用户注册。注册动作会修改系统状态，CLI 自测不会执行注册。
+注册脚本按官方流程使用管理员权限注册系统级 TSF；它会先注册 COM Host，再调用 TSF 官方接口登记文本服务、简体中文 Profile 和键盘类别。注册动作会修改系统状态，CLI 自测不会执行注册。
 
 `probe-registration` 只读创建并检查 TSF 官方 COM 管理器；`register --apply` 和 `unregister --apply` 才会调用官方注册接口并修改系统状态，未传 `--apply` 会拒绝执行。当前自动化测试只运行探测，不执行系统注册。
+
+完成一次系统注册后，可运行 `scripts\verify-tsf-registration.ps1` 做只读验收；它只检查 COM 路径、CLSID、简体中文 LANGID 和 Profile GUID。
 
 TSF 激活后只有在进程环境中同时存在以下两个变量时，才会启动每分钟只读同步；缺少任意一个变量时只使用本地快照：
 

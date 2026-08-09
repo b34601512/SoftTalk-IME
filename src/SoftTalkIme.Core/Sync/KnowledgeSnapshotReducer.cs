@@ -1,4 +1,5 @@
 using System.Text.Json;
+using SoftTalkIme.Core.Indexing;
 using SoftTalkIme.Core.Models;
 
 namespace SoftTalkIme.Core.Sync;
@@ -116,15 +117,20 @@ public static class KnowledgeSnapshotReducer
                     SortOrder: ReadInt(record, "sort_order"));
                 break;
             case "st_faq":
+                var question = ReadString(record, "question");
+                var answer = ReadString(record, "answer");
+                var remotePinyinIndex = ReadString(record, "pinyin_index_text");
                 snapshot.Entries[id] = new KnowledgeEntry(
                     Id: id,
-                    Question: ReadString(record, "question"),
-                    Answer: ReadString(record, "answer"),
+                    Question: question,
+                    Answer: answer,
                     CategoryId: ReadString(record, "category_uuid"),
                     Scope: ReadString(record, "phrase_scope", scope),
                     PhraseSetNo: ReadInt(record, "phrase_set_no"),
                     SortOrder: ReadInt(record, "sort_order"),
-                    PinyinIndexText: ReadString(record, "pinyin_index_text"));
+                    PinyinIndexText: string.IsNullOrWhiteSpace(remotePinyinIndex)
+                        ? PinyinIndexBuilder.Build(question, answer)
+                        : remotePinyinIndex);
                 break;
         }
     }

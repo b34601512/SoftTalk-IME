@@ -1,4 +1,5 @@
 using System.Text;
+using SoftTalkIme.Core.Indexing;
 using SoftTalkIme.Core.Models;
 
 namespace SoftTalkIme.Core.Search;
@@ -19,10 +20,16 @@ public static class KnowledgeSearchEngine
 
         var tokens = SplitTokens(normalizedQuery);
         var hits = new List<SearchHit>();
+        var categoryPinyinCache = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var entry in snapshot.Entries.Values)
         {
             var categoryPath = BuildCategoryPath(snapshot, entry.CategoryId);
-            var score = ScoreEntry(entry, categoryPath, tokens);
+            if (!categoryPinyinCache.TryGetValue(categoryPath, out var categoryPinyin))
+            {
+                categoryPinyin = PinyinIndexBuilder.Build(categoryPath);
+                categoryPinyinCache[categoryPath] = categoryPinyin;
+            }
+            var score = ScoreEntry(entry, categoryPath, categoryPinyin, tokens);
             if (score <= 0)
             {
                 continue;
@@ -54,12 +61,16 @@ public static class KnowledgeSearchEngine
     private static double ScoreEntry(
         KnowledgeEntry entry,
         string categoryPath,
+        string categoryPinyin,
         IReadOnlyList<string> tokens)
     {
         var question = Normalize(entry.Question);
         var answer = Normalize(entry.Answer);
         var category = Normalize(categoryPath);
-        var pinyin = Normalize(entry.PinyinIndexText);
+        var pinyin = Normalize(string.IsNullOrWhiteSpace(entry.PinyinIndexText)
+            ? PinyinIndexBuilder.Build(entry.Question, entry.Answer)
+            : entry.PinyinIndexText);
+        var normalizedCategoryPinyin = Normalize(categoryPinyin);
         var score = 0d;
 
         foreach (var token in tokens)
@@ -80,7 +91,8 @@ public static class KnowledgeSearchEngine
                 score += 35;
                 matched = true;
             }
-            if (category.Contains(token, StringComparison.OrdinalIgnoreCase))
+            if (category.Contains(token, StringComparison.OrdinalIgnoreCase)
+                || normalizedCategoryPinyin.Contains(token, StringComparison.OrdinalIgnoreCase))
             {
                 score += 20;
                 matched = true;
