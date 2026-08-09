@@ -79,5 +79,8 @@ if ($registerSource -notmatch "IsInRole.*Administrator" -or $unregisterSource -n
 if ($registerSource -notmatch "Start-Process" -or $unregisterSource -notmatch "Start-Process") {
     throw "TSF 注册/卸载脚本没有使用可检查退出码的 regsvr32 调用。"
 }
+if ($registerSource -notmatch "Verb RunAs" -or $unregisterSource -notmatch "Verb RunAs") {
+    throw "TSF 注册/卸载脚本没有自动请求 UAC 提权。"
+}
 
 Write-Output "TSF_BUILD_VALIDATED: $resolvedPublishDir"
