@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$RepoDir = (Split-Path -Parent $MyInvocation.MyCommand.Path),
     [string]$TargetBranch = "main",
     [string]$CommitMessage = "自动备份",
