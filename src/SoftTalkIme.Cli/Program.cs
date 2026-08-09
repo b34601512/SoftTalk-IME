@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Net;
 using SoftTalkIme.Core.Models;
 using SoftTalkIme.Core.Search;
 using SoftTalkIme.Core.Storage;
@@ -80,6 +81,8 @@ internal static class CliSelfTests
         TestPollInterval();
         TestIncrementalSyncPagination();
         TestSyncWorkerSavesOnlyAfterSuccess();
+        TestHttpTransportIsReadOnly();
+        TestSyncWorkerKeepsOldSnapshotOnFailure();
         TestUsageStatisticsAndRanking();
     }
 
@@ -222,6 +225,76 @@ internal static class CliSelfTests
         }
     }
 
+    private static void TestHttpTransportIsReadOnly()
+    {
+        var handler = new RecordingHttpMessageHandler();
+        using var httpClient = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://sync.example.test"),
+        };
+        var transport = new HttpReadOnlyKnowledgeSyncTransport(httpClient, "read-only-token", "test-client");
+
+        transport.FetchHeadAsync(SyncConstants.FormalScopes).GetAwaiter().GetResult().Dispose();
+        transport.FetchCurrentStateAsync(
+            SyncConstants.TeamScope,
+            afterSequence: 3,
+            pageCursor: null,
+            syncSequence: 4).GetAwaiter().GetResult().Dispose();
+
+        Assert(handler.Requests.Count == 2, "只读同步请求数量错误");
+        Assert(handler.Requests.All(request => request.Method == HttpMethod.Post), "只读同步出现非 POST 请求");
+        Assert(
+            handler.Requests.Select(request => request.Path).SequenceEqual(
+                new[] { SyncConstants.HeadPath, SyncConstants.CurrentStatePath }),
+            "只读同步访问了非约定接口");
+        Assert(handler.Requests.All(request => request.Authorization == "Bearer read-only-token"), "只读同步令牌未正确传递");
+        Assert(handler.Requests.All(request => request.ClientVersion == "test-client"), "客户端版本请求头缺失");
+        Assert(handler.Requests.All(request => request.ProtocolVersion == SyncConstants.ProtocolVersion), "同步协议版本请求头缺失");
+        Assert(handler.Requests.All(request => request.SchemaVersion == SyncConstants.SchemaVersion), "同步数据版本请求头缺失");
+        Assert(!handler.Requests.Any(request => request.Path.Contains("write", StringComparison.OrdinalIgnoreCase)), "只读同步触碰写入接口");
+    }
+
+    private static void TestSyncWorkerKeepsOldSnapshotOnFailure()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"SoftTalkImeWorkerFailure-{Guid.NewGuid():N}");
+        var path = Path.Combine(directory, "snapshot.json");
+        try
+        {
+            var store = new KnowledgeSnapshotStore();
+            var initial = new KnowledgeSnapshot();
+            initial.ScopeSequences[SyncConstants.TeamScope] = 9;
+            initial.Entries["old"] = new KnowledgeEntry(
+                "old", "旧话术", "旧答案", "", SyncConstants.TeamScope, 0, 1);
+            store.SaveAtomic(path, initial);
+            var before = File.ReadAllText(path);
+            var worker = new KnowledgeSyncWorker(
+                new KnowledgeSyncCoordinator(new FailingSyncTransport()),
+                store,
+                path);
+
+            var failed = false;
+            try
+            {
+                worker.PollAndSaveAsync().GetAwaiter().GetResult();
+            }
+            catch (InvalidOperationException)
+            {
+                failed = true;
+            }
+
+            Assert(failed, "同步失败没有向调用方报告异常");
+            Assert(File.ReadAllText(path) == before, "同步失败覆盖了旧快照");
+            Assert(store.LoadOrEmpty(path).ScopeSequences[SyncConstants.TeamScope] == 9, "同步失败未保留旧版本号");
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
     private static void TestUsageStatisticsAndRanking()
     {
         var snapshot = new KnowledgeSnapshot();
@@ -341,4 +414,70 @@ internal static class CliSelfTests
             return Task.FromResult(JsonDocument.Parse(json));
         }
     }
+
+    private sealed class FailingSyncTransport : IReadOnlyKnowledgeSyncTransport
+    {
+        public Task<JsonDocument> FetchHeadAsync(
+            IReadOnlyList<string> scopes,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromException<JsonDocument>(new InvalidOperationException("模拟同步失败"));
+        }
+
+        public Task<JsonDocument> FetchCurrentStateAsync(
+            string scope,
+            long afterSequence,
+            string? pageCursor,
+            long? syncSequence,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromException<JsonDocument>(new InvalidOperationException("模拟同步失败"));
+        }
+    }
+
+    private sealed class RecordingHttpMessageHandler : HttpMessageHandler
+    {
+        public List<RecordedHttpRequest> Requests { get; } = new();
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var requestBody = request.Content is null
+                ? string.Empty
+                : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            Requests.Add(new RecordedHttpRequest(
+                request.Method,
+                request.RequestUri?.AbsolutePath ?? string.Empty,
+                request.Headers.Authorization?.ToString() ?? string.Empty,
+                ReadHeader(request, "X-SoftTalk-Client-Version"),
+                ReadHeader(request, "X-SoftTalk-Sync-Protocol-Version"),
+                ReadHeader(request, "X-SoftTalk-Sync-Schema-Version"),
+                requestBody));
+
+            var responseBody = request.RequestUri?.AbsolutePath == SyncConstants.HeadPath
+                ? "{\"scopes\":{\"team_phrases\":4,\"private_phrases\":0}}"
+                : "{\"sync_seq\":4,\"has_more\":false,\"object_total\":0,\"table_batches\":[]}";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(responseBody),
+            };
+        }
+
+        private static string ReadHeader(HttpRequestMessage request, string name)
+        {
+            return request.Headers.TryGetValues(name, out var values)
+                ? values.Single()
+                : string.Empty;
+        }
+    }
+
+    private sealed record RecordedHttpRequest(
+        HttpMethod Method,
+        string Path,
+        string Authorization,
+        string ClientVersion,
+        string ProtocolVersion,
+        string SchemaVersion,
+        string Body);
 }
