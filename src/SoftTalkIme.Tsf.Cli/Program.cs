@@ -70,8 +70,21 @@ static int RunSelfTest()
     candidateList.GetCount(out count);
     candidateList.GetSelection(out selection);
     Assert(count == 0 && selection == 0, "候选清空状态错误");
+    TestNoHitFallsBackToNormalInput();
     Console.WriteLine("TSF_CANDIDATE_SELF_TEST_PASSED");
     return 0;
+}
+
+static void TestNoHitFallsBackToNormalInput()
+{
+    var firstMiss = TsfQueryFallbackPolicy.Decide("", "z", hasMatches: false);
+    Assert(!firstMiss.EatKey && firstMiss.FallbackText is null, "首个无命中字母没有交还普通输入");
+
+    var laterMiss = TsfQueryFallbackPolicy.Decide("tu", "tux", hasMatches: false);
+    Assert(laterMiss.EatKey && laterMiss.FallbackText == "tux", "已有查询无命中时没有回退完整普通文本");
+
+    var match = TsfQueryFallbackPolicy.Decide("t", "tu", hasMatches: true);
+    Assert(match.EatKey && match.FallbackText is null, "命中候选时错误回退普通输入");
 }
 
 static int PrintHelp()

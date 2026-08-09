@@ -185,9 +185,30 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
 
         if (key is >= 'A' and <= 'Z')
         {
+            var previousQuery = _query;
             _query += char.ToLowerInvariant((char)key);
-            RefreshHits(context);
-            eaten = 1;
+            var nextHits = SearchHits(_query);
+            var decision = TsfQueryFallbackPolicy.Decide(
+                previousQuery,
+                _query,
+                nextHits.Count > 0);
+            if (decision.FallbackText is not null)
+            {
+                HideCandidates();
+                var result = InsertText(context, decision.FallbackText);
+                ResetSession();
+                eaten = result >= 0 ? 1 : 0;
+            }
+            else if (!decision.EatKey)
+            {
+                ResetSession();
+            }
+            else
+            {
+                ApplyHits(context, nextHits);
+                eaten = 1;
+            }
+
             return TsfHResults.SOk;
         }
 
@@ -281,10 +302,20 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
 
     private void RefreshHits(nint context)
     {
-        _hits = KnowledgeSearchEngine.Search(
+        ApplyHits(context, SearchHits(_query));
+    }
+
+    private IReadOnlyList<SearchHit> SearchHits(string query)
+    {
+        return KnowledgeSearchEngine.Search(
             Volatile.Read(ref _snapshot),
-            _query,
+            query,
             usageCounts: _usageStatistics.Counts);
+    }
+
+    private void ApplyHits(nint context, IReadOnlyList<SearchHit> hits)
+    {
+        _hits = hits;
         if (_hits.Count == 0)
         {
             HideCandidates();
@@ -487,8 +518,22 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
             return false;
         }
 
-        if (key is >= 'A' and <= 'Z'
-            || key == TsfConstants.VirtualKeyBackspace
+        if (key is >= 'A' and <= 'Z')
+        {
+            var nextQuery = _query + char.ToLowerInvariant((char)key);
+            var decision = TsfQueryFallbackPolicy.Decide(
+                _query,
+                nextQuery,
+                SearchHits(nextQuery).Count > 0);
+            if (!decision.EatKey && _query.Length == 0)
+            {
+                ResetSession();
+            }
+
+            return decision.EatKey;
+        }
+
+        if (key == TsfConstants.VirtualKeyBackspace
             || key == TsfConstants.VirtualKeyEscape
             )
         {
