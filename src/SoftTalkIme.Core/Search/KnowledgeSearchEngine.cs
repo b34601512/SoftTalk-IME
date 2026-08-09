@@ -8,7 +8,8 @@ public static class KnowledgeSearchEngine
     public static IReadOnlyList<SearchHit> Search(
         KnowledgeSnapshot snapshot,
         string query,
-        int limit = 9)
+        int limit = 9,
+        IReadOnlyDictionary<string, long>? usageCounts = null)
     {
         var normalizedQuery = Normalize(query);
         if (string.IsNullOrWhiteSpace(normalizedQuery) || limit <= 0)
@@ -32,10 +33,22 @@ public static class KnowledgeSearchEngine
 
         return hits
             .OrderByDescending(hit => hit.Score)
+            .ThenByDescending(hit => GetUsageCount(usageCounts, hit.Entry.Id))
             .ThenBy(hit => hit.Entry.SortOrder)
             .ThenBy(hit => hit.Entry.Id, StringComparer.Ordinal)
             .Take(limit)
             .ToArray();
+    }
+
+    private static long GetUsageCount(
+        IReadOnlyDictionary<string, long>? usageCounts,
+        string entryId)
+    {
+        return usageCounts is not null
+            && usageCounts.TryGetValue(entryId, out var count)
+            && count > 0
+            ? count
+            : 0;
     }
 
     private static double ScoreEntry(

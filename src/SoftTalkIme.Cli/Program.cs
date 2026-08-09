@@ -79,6 +79,7 @@ internal static class CliSelfTests
         TestPollInterval();
         TestIncrementalSyncPagination();
         TestSyncWorkerSavesOnlyAfterSuccess();
+        TestUsageStatisticsAndRanking();
     }
 
     private static void TestSyncHeadDecision()
@@ -181,6 +182,55 @@ internal static class CliSelfTests
             worker.PollAndSaveAsync().GetAwaiter().GetResult();
             var saved = store.LoadOrEmpty(path);
             Assert(saved.ScopeSequences[SyncConstants.TeamScope] == 2, "同步 worker 未原子保存新快照");
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
+    private static void TestUsageStatisticsAndRanking()
+    {
+        var snapshot = new KnowledgeSnapshot();
+        snapshot.Entries["faq-a"] = new KnowledgeEntry(
+            "faq-a", "退款怎么处理", "请提供订单号", "", "team", 0, 1);
+        snapshot.Entries["faq-b"] = new KnowledgeEntry(
+            "faq-b", "退款怎么处理", "请提供订单号和截图", "", "team", 0, 2);
+        snapshot.Entries["faq-low"] = new KnowledgeEntry(
+            "faq-low", "售后流程", "退款会在三个工作日内处理", "", "team", 0, 0);
+
+        var statistics = new KnowledgeUsageStatistics();
+        statistics.RecordUse("faq-a");
+        for (var index = 0; index < 5; index++)
+        {
+            statistics.RecordUse("faq-b");
+        }
+        for (var index = 0; index < 100; index++)
+        {
+            statistics.RecordUse("faq-low");
+        }
+
+        var hits = KnowledgeSearchEngine.Search(
+            snapshot,
+            "退款",
+            usageCounts: statistics.Counts);
+        Assert(hits[0].Entry.Id == "faq-b", "同等相关性下未按使用次数排序");
+        Assert(hits[1].Entry.Id == "faq-a", "使用次数排序破坏了同等相关性顺序");
+        Assert(hits[2].Entry.Id == "faq-low", "低相关性话术被使用次数错误置顶");
+
+        var directory = Path.Combine(Path.GetTempPath(), $"SoftTalkImeUsage-{Guid.NewGuid():N}");
+        var path = Path.Combine(directory, "usage-stats.json");
+        try
+        {
+            var store = new KnowledgeUsageStatisticsStore();
+            store.SaveAtomic(path, statistics);
+            var loaded = store.LoadOrEmpty(path);
+            Assert(loaded.GetCount("faq-b") == 5, "使用次数原子保存/读取错误");
+            File.WriteAllText(path, "{ not-json }");
+            Assert(store.LoadOrEmpty(path).GetCount("faq-b") == 0, "损坏统计文件未安全回退");
         }
         finally
         {

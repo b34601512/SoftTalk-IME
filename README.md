@@ -16,6 +16,7 @@
 
 - `src/SoftTalkIme.Core`：只读同步、本地快照、候选检索；不包含任何知识库写入接口。
 - `KnowledgeSyncWorker`：每分钟检查版本，有变化才拉取并原子保存本地快照；同步失败保留旧快照。
+- `KnowledgeUsageStatisticsStore`：只在成功插入后记录本地选词次数；排序先看相关性，再看使用次数。
 - `src/SoftTalkIme.Cli`：CLI 自测和快照检索入口，供自动化测试使用。
 - `src/SoftTalkIme.Tsf`：Windows TSF COM Host；负责接收键盘事件、显示候选窗口并向当前文本框插入结果。
 - `scripts/register-tsf.ps1`：注册 TSF（会修改系统注册表，测试阶段不要直接运行）。
@@ -47,6 +48,8 @@ TSF 激活后只有在进程环境中同时存在以下两个变量时，才会�
 $env:SOFTTALK_IME_SYNC_BASE_URL = "https://你的同步服务地址"
 $env:SOFTTALK_IME_SYNC_TOKEN = "只读同步令牌"
 ```
+
+使用次数默认保存在 `%LOCALAPPDATA%\SoftTalk\IME\usage-stats.json`，也可通过 `SOFTTALK_IME_USAGE_STATS` 指定路径。它属于本地偏好，不会上传或写回知识库。
 
 ## 一键备份
 

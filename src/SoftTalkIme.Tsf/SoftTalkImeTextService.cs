@@ -14,9 +14,12 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
     public const string ClassId = "D8B1F2B4-9F1D-48A6-93E7-2D8B0F1D6D41";
 
     private readonly string _snapshotPath;
+    private readonly string _usagePath;
+    private readonly KnowledgeUsageStatisticsStore _usageStore;
     private readonly KnowledgeSyncWorker? _syncWorker;
     private readonly HttpClient? _syncHttpClient;
     private KnowledgeSnapshot _snapshot;
+    private KnowledgeUsageStatistics _usageStatistics;
     private ITfKeystrokeManagerNative? _keystrokeManager;
     private ITfUIElementManagerNative? _uiElementManager;
     private readonly SoftTalkCandidateList _candidateList;
@@ -39,7 +42,15 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
                 "SoftTalk",
                 "IME",
                 "knowledge.snapshot.json");
+        _usagePath = Environment.GetEnvironmentVariable("SOFTTALK_IME_USAGE_STATS")
+            ?? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SoftTalk",
+                "IME",
+                "usage-stats.json");
         _snapshot = new KnowledgeSnapshotStore().LoadOrEmpty(_snapshotPath);
+        _usageStore = new KnowledgeUsageStatisticsStore();
+        _usageStatistics = _usageStore.LoadOrEmpty(_usagePath);
         (_syncWorker, _syncHttpClient) = CreateSyncWorker(_snapshotPath);
         _candidateList = new SoftTalkCandidateList(
             index => InsertHit(_lastContext, index),
@@ -236,6 +247,7 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
         var result = InsertText(context, text);
         if (result >= 0)
         {
+            RecordUsage(_hits[index].Entry.Id);
             ResetSession();
         }
         return result;
@@ -269,7 +281,10 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
 
     private void RefreshHits(nint context)
     {
-        _hits = KnowledgeSearchEngine.Search(Volatile.Read(ref _snapshot), _query);
+        _hits = KnowledgeSearchEngine.Search(
+            Volatile.Read(ref _snapshot),
+            _query,
+            usageCounts: _usageStatistics.Counts);
         if (_hits.Count == 0)
         {
             HideCandidates();
@@ -344,6 +359,21 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
     {
         _query = string.Empty;
         _hits = Array.Empty<SearchHit>();
+    }
+
+    private void RecordUsage(string entryId)
+    {
+        _usageStatistics.RecordUse(entryId);
+        try
+        {
+            _usageStore.SaveAtomic(_usagePath, _usageStatistics);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     private void ResetSession()
