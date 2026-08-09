@@ -1,0 +1,65 @@
+using SoftTalkIme.Tsf;
+
+return args.FirstOrDefault()?.Trim().ToLowerInvariant() switch
+{
+    null or "self-test" => RunSelfTest(),
+    "help" or "--help" or "-h" => PrintHelp(),
+    _ => Fail("未知命令。"),
+};
+
+static int RunSelfTest()
+{
+    var finalizedIndex = -1;
+    var aborted = false;
+    var candidateList = new SoftTalkCandidateList(
+        index =>
+        {
+            finalizedIndex = index;
+            return 0;
+        },
+        () => aborted = true);
+
+    candidateList.SetItems(Enumerable.Range(0, 12).Select(index => $"候选 {index}").ToArray());
+    candidateList.GetCount(out var count);
+    Assert(count == 9, "候选数量没有限制为 9 条");
+    Assert(candidateList.GetString(8, out var last) == 0 && last == "候选 8", "候选文本读取错误");
+    Assert(candidateList.GetString(9, out _) == unchecked((int)0x80070057), "越界候选未返回参数错误");
+    candidateList.GetUpdatedFlags(out var updatedFlags);
+    Assert(updatedFlags != 0, "候选更新没有标记变更");
+    candidateList.GetUpdatedFlags(out var clearedFlags);
+    Assert(clearedFlags == 0, "候选更新标记未清空");
+
+    Assert(candidateList.SetSelection(2) == 0, "候选选择失败");
+    candidateList.GetSelection(out var selection);
+    Assert(selection == 2, "候选选择状态错误");
+    Assert(candidateList.FinalizeCandidate() == 0 && finalizedIndex == 2, "候选确认回调错误");
+    Assert(candidateList.Abort() == 0 && aborted, "候选取消回调错误");
+
+    candidateList.SetItems(Array.Empty<string>());
+    candidateList.GetCount(out count);
+    candidateList.GetSelection(out selection);
+    Assert(count == 0 && selection == 0, "候选清空状态错误");
+    Console.WriteLine("TSF_CANDIDATE_SELF_TEST_PASSED");
+    return 0;
+}
+
+static int PrintHelp()
+{
+    Console.WriteLine("SoftTalk-IME TSF CLI");
+    Console.WriteLine("  self-test    运行无需 GUI 的候选状态自测");
+    return 0;
+}
+
+static int Fail(string message)
+{
+    Console.Error.WriteLine(message);
+    return 2;
+}
+
+static void Assert(bool condition, string message)
+{
+    if (!condition)
+    {
+        throw new InvalidOperationException(message);
+    }
+}

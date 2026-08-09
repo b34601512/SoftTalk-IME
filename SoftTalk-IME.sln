@@ -8,6 +8,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SoftTalkIme.Cli", "src\Soft
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SoftTalkIme.Tsf", "src\SoftTalkIme.Tsf\SoftTalkIme.Tsf.csproj", "{D4F1E1A2-F2E0-4E8E-BEBB-2A7F013F1403}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SoftTalkIme.Tsf.Cli", "src\SoftTalkIme.Tsf.Cli\SoftTalkIme.Tsf.Cli.csproj", "{E5C2F2B3-03F1-4F9F-9FCB-3B8E124F1504}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -26,6 +28,10 @@ Global
 		{D4F1E1A2-F2E0-4E8E-BEBB-2A7F013F1403}.Debug|x64.Build.0 = Debug|x64
 		{D4F1E1A2-F2E0-4E8E-BEBB-2A7F013F1403}.Release|x64.ActiveCfg = Release|x64
 		{D4F1E1A2-F2E0-4E8E-BEBB-2A7F013F1403}.Release|x64.Build.0 = Release|x64
+		{E5C2F2B3-03F1-4F9F-9FCB-3B8E124F1504}.Debug|x64.ActiveCfg = Debug|x64
+		{E5C2F2B3-03F1-4F9F-9FCB-3B8E124F1504}.Debug|x64.Build.0 = Debug|x64
+		{E5C2F2B3-03F1-4F9F-9FCB-3B8E124F1504}.Release|x64.ActiveCfg = Release|x64
+		{E5C2F2B3-03F1-4F9F-9FCB-3B8E124F1504}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
