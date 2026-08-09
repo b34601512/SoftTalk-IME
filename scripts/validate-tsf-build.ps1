@@ -21,6 +21,7 @@ foreach ($fileName in $requiredFiles) {
 
 $serviceSource = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "..\src\SoftTalkIme.Tsf\SoftTalkImeTextService.cs")
 $interopSource = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "..\src\SoftTalkIme.Tsf\TsfInterop.cs")
+$registrationSource = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "..\src\SoftTalkIme.Tsf\TsfRegistration.cs")
 $registerSource = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "register-tsf.ps1")
 $unregisterSource = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "unregister-tsf.ps1")
 if ($serviceSource -notmatch "D8B1F2B4-9F1D-48A6-93E7-2D8B0F1D6D41") {
@@ -37,6 +38,22 @@ if ($interopSource -notmatch "EA1EA138-19DF-11D7-A6D2-00065B84435C") {
 }
 if ($interopSource -notmatch "EA1EA135-19DF-11D7-A6D2-00065B84435C") {
     throw "ITfUIElementMgr GUID 未出现在源码中。"
+}
+foreach ($guid in @(
+        "1F02B6C5-7842-4EE6-8A0B-9A24183A95CA",
+        "C3ACEFB5-F69D-4905-938F-FCADCF4BE830",
+        "33C53A50-F456-4884-B049-85FD643ECFED",
+        "A4B544A1-438D-4B41-9325-869523E2D6C7",
+        "34745C63-B2F0-4784-8B67-5E12C8701A31")) {
+    if ($registrationSource -notmatch $guid) {
+        throw "TSF 官方注册契约缺少 GUID：$guid"
+    }
+}
+if ($registrationSource -notmatch "SimplifiedChineseLanguageId = 0x0804") {
+    throw "TSF 官方注册契约没有使用简体中文 LANGID 0x0804。"
+}
+if ($registerSource -notmatch "0x00000804") {
+    throw "TSF 注册脚本没有使用简体中文 LANGID 0x0804。"
 }
 $expectedPublishSegment = [regex]::Escape("bin\Release\net8.0-windows\publish")
 if ($registerSource -notmatch $expectedPublishSegment -or $unregisterSource -notmatch $expectedPublishSegment) {

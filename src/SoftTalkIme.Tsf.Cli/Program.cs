@@ -3,9 +3,40 @@ using SoftTalkIme.Tsf;
 return args.FirstOrDefault()?.Trim().ToLowerInvariant() switch
 {
     null or "self-test" => RunSelfTest(),
+    "probe-registration" => RunRegistrationProbe(),
+    "register" => RunRegistration(args.Skip(1).ToArray(), register: true),
+    "unregister" => RunRegistration(args.Skip(1).ToArray(), register: false),
     "help" or "--help" or "-h" => PrintHelp(),
     _ => Fail("未知命令。"),
 };
+
+static int RunRegistrationProbe()
+{
+    TsfRegistration.Probe();
+    Console.WriteLine("TSF_REGISTRATION_PROBE_PASSED");
+    return 0;
+}
+
+static int RunRegistration(string[] args, bool register)
+{
+    if (!args.Contains("--apply", StringComparer.OrdinalIgnoreCase))
+    {
+        return Fail("注册或卸载会修改系统状态；请显式传入 --apply。自动化测试不执行此命令。 ");
+    }
+
+    if (register)
+    {
+        TsfRegistration.Register();
+        Console.WriteLine("TSF_REGISTERED");
+    }
+    else
+    {
+        TsfRegistration.Unregister();
+        Console.WriteLine("TSF_UNREGISTERED");
+    }
+
+    return 0;
+}
 
 static int RunSelfTest()
 {
@@ -47,6 +78,9 @@ static int PrintHelp()
 {
     Console.WriteLine("SoftTalk-IME TSF CLI");
     Console.WriteLine("  self-test    运行无需 GUI 的候选状态自测");
+    Console.WriteLine("  probe-registration    只读探测 TSF 官方注册 COM 接口");
+    Console.WriteLine("  register --apply      执行 TSF 官方注册（修改系统状态）");
+    Console.WriteLine("  unregister --apply    执行 TSF 官方卸载（修改系统状态）");
     return 0;
 }
 

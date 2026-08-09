@@ -7,6 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 $clsid = "{D8B1F2B4-9F1D-48A6-93E7-2D8B0F1D6D41}"
 $profileId = "{C1E7B9C8-7E3F-45CF-9E2A-3F705C4F0C6B}"
+$languageId = "0x00000804"
 $dllPath = Join-Path (Resolve-Path $PublishDir) "SoftTalkIme.Tsf.comhost.dll"
 
 if (-not (Test-Path -LiteralPath $dllPath)) {
@@ -17,7 +18,7 @@ $root = if ($CurrentUser) { "HKCU:\Software\Classes" } else { "HKLM:\Software\Cl
 $tipRoot = if ($CurrentUser) { "HKCU:\Software\Microsoft\CTF\TIP" } else { "HKLM:\Software\Microsoft\CTF\TIP" }
 $clsidPath = Join-Path $root "CLSID\$clsid\InprocServer32"
 $tipPath = Join-Path $tipRoot $clsid
-$languageProfilePath = Join-Path $tipPath "LanguageProfile\0x00000404\$profileId"
+$languageProfilePath = Join-Path $tipPath "LanguageProfile\$languageId\$profileId"
 
 if ($PSCmdlet.ShouldProcess($dllPath, "注册 SoftTalk-IME TSF COM Host")) {
     New-Item -Path $clsidPath -Force | Out-Null
