@@ -60,6 +60,74 @@ public interface ITfKeyEventSink
 }
 
 [ComVisible(true)]
+[Guid("EA1EA137-19DF-11D7-A6D2-00065B84435C")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface ITfUIElement
+{
+    [PreserveSig]
+    int GetDescription([MarshalAs(UnmanagedType.BStr)] out string description);
+
+    [PreserveSig]
+    int GetGUID(out Guid elementGuid);
+
+    [PreserveSig]
+    int Show(int show);
+
+    [PreserveSig]
+    int IsShown(out int show);
+}
+
+[ComVisible(true)]
+[Guid("EA1EA138-19DF-11D7-A6D2-00065B84435C")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface ITfCandidateListUIElement : ITfUIElement
+{
+    [PreserveSig]
+    int GetUpdatedFlags(out uint flags);
+
+    [PreserveSig]
+    int GetDocumentMgr(out nint documentManager);
+
+    [PreserveSig]
+    int GetCount(out uint count);
+
+    [PreserveSig]
+    int GetSelection(out uint index);
+
+    [PreserveSig]
+    int GetString(uint index, [MarshalAs(UnmanagedType.BStr)] out string text);
+
+    [PreserveSig]
+    int GetPageIndex(
+        [Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] uint[]? index,
+        uint size,
+        out uint pageCount);
+
+    [PreserveSig]
+    int SetPageIndex(
+        [In, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] uint[]? index,
+        uint pageCount);
+
+    [PreserveSig]
+    int GetCurrentPage(out uint page);
+}
+
+[ComVisible(true)]
+[Guid("85FAD185-58CE-497A-9460-355366B64B9A")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface ITfCandidateListUIElementBehavior
+{
+    [PreserveSig]
+    int SetSelection(uint index);
+
+    [PreserveSig]
+    int FinalizeCandidate();
+
+    [PreserveSig]
+    int Abort();
+}
+
+[ComVisible(true)]
 [Guid("AA80E803-2021-11D2-93E0-0060B067B86E")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 internal interface ITfEditSession
@@ -94,6 +162,71 @@ internal interface ITfContextNative
         [MarshalAs(UnmanagedType.Interface)] ITfEditSession editSession,
         uint flags,
         out int sessionResult);
+
+    [PreserveSig]
+    int InWriteSession(uint clientId, out int writeSession);
+
+    [PreserveSig]
+    int GetSelection(uint editCookie, uint index, uint count, nint selection, out uint fetched);
+
+    [PreserveSig]
+    int SetSelection(uint editCookie, uint count, nint selection);
+
+    [PreserveSig]
+    int GetStart(uint editCookie, out nint range);
+
+    [PreserveSig]
+    int GetEnd(uint editCookie, out nint range);
+
+    [PreserveSig]
+    int GetActiveView(out nint view);
+
+    [PreserveSig]
+    int EnumViews(out nint views);
+
+    [PreserveSig]
+    int GetStatus(out nint status);
+
+    [PreserveSig]
+    int GetProperty(ref Guid propertyGuid, out nint property);
+
+    [PreserveSig]
+    int GetAppProperty(ref Guid propertyGuid, out nint property);
+
+    [PreserveSig]
+    int TrackProperties(
+        nint propertyGuids,
+        uint propertyCount,
+        nint appPropertyGuids,
+        uint appPropertyCount,
+        out nint property);
+
+    [PreserveSig]
+    int EnumProperties(out nint properties);
+
+    [PreserveSig]
+    int GetDocumentMgr(out nint documentManager);
+
+    [PreserveSig]
+    int CreateRangeBackup(uint editCookie, nint range, out nint backup);
+}
+
+[ComImport]
+[Guid("EA1EA135-19DF-11D7-A6D2-00065B84435C")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface ITfUIElementManagerNative
+{
+    [PreserveSig]
+    int BeginUIElement(
+        [MarshalAs(UnmanagedType.Interface)] ITfUIElement element,
+        ref int show,
+        out uint elementId);
+
+    [PreserveSig]
+    int UpdateUIElement(uint elementId);
+
+    [PreserveSig]
+    int EndUIElement(uint elementId);
 }
 
 [ComImport]

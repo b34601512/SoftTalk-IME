@@ -17,7 +17,7 @@
 - `src/SoftTalkIme.Core`：只读同步、本地快照、候选检索；不包含任何知识库写入接口。
 - `KnowledgeSyncWorker`：每分钟检查版本，有变化才拉取并原子保存本地快照；同步失败保留旧快照。
 - `src/SoftTalkIme.Cli`：CLI 自测和快照检索入口，供自动化测试使用。
-- `src/SoftTalkIme.Tsf`：Windows TSF COM Host；只负责接收键盘事件和向当前文本框插入结果。
+- `src/SoftTalkIme.Tsf`：Windows TSF COM Host；负责接收键盘事件、显示候选窗口并向当前文本框插入结果。
 - `scripts/register-tsf.ps1`：注册 TSF（会修改系统注册表，测试阶段不要直接运行）。
 - `scripts/unregister-tsf.ps1`：卸载 TSF。
 
@@ -30,7 +30,7 @@
 1. `dotnet build SoftTalk-IME.sln --configuration Release`
 2. `dotnet run --project src/SoftTalkIme.Cli/SoftTalkIme.Cli.csproj --configuration Release -- self-test`
 
-TSF 层当前采用最小可验证交互：切换到 SoftTalk-IME 后按 `Ctrl+Shift+Space` 进入话术模式，输入英文检索词，按 `Enter`/`Space` 输出第一条结果，按 `F1-F9` 选择候选，按 `Esc` 取消。候选窗口和同步后台调度会在下一阶段补齐；业务核心已经可以独立测试。
+TSF 层当前采用最小可验证交互：切换到 SoftTalk-IME 后按 `Ctrl+Shift+Space` 进入话术模式，输入英文检索词，候选窗口显示相关话术，按 `Enter`/`Space` 输出第一条结果，按 `F1-F9` 选择候选，按 `Esc` 取消。候选窗口代码和每分钟只读同步已接入；尚未执行系统注册与人工输入实测，相关 Issue 保持开放。
 
 发布 TSF COM Host：
 

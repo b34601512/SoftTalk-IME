@@ -18,6 +18,11 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
     private readonly HttpClient? _syncHttpClient;
     private KnowledgeSnapshot _snapshot;
     private ITfKeystrokeManagerNative? _keystrokeManager;
+    private ITfUIElementManagerNative? _uiElementManager;
+    private readonly SoftTalkCandidateList _candidateList;
+    private uint _uiElementId;
+    private bool _uiElementBegun;
+    private nint _lastContext;
     private CancellationTokenSource? _syncCancellation;
     private Task? _syncTask;
     private uint _clientId;
@@ -36,6 +41,9 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
                 "knowledge.snapshot.json");
         _snapshot = new KnowledgeSnapshotStore().LoadOrEmpty(_snapshotPath);
         (_syncWorker, _syncHttpClient) = CreateSyncWorker(_snapshotPath);
+        _candidateList = new SoftTalkCandidateList(
+            index => InsertHit(_lastContext, index),
+            ResetSession);
     }
 
     public int Activate(nint threadManager, uint clientId)
@@ -58,6 +66,16 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
             }
 
             _keystrokeManager = manager;
+            try
+            {
+                _uiElementManager = (ITfUIElementManagerNative)Marshal.GetTypedObjectForIUnknown(
+                    threadManager,
+                    typeof(ITfUIElementManagerNative));
+            }
+            catch (COMException)
+            {
+                _uiElementManager = null;
+            }
             _clientId = clientId;
             _active = true;
             StartSync();
@@ -85,6 +103,8 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
             _active = false;
             StopSync();
             ResetSession();
+            ReleaseComObject(_uiElementManager);
+            _uiElementManager = null;
             return result;
         }
         catch (Exception exception)
@@ -141,8 +161,8 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
         var key = checked((int)virtualKey);
         if (IsArmHotkey(key))
         {
+            ResetSession();
             _sessionArmed = true;
-            ClearQuery();
             eaten = 1;
             return TsfHResults.SOk;
         }
@@ -155,7 +175,7 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
         if (key is >= 'A' and <= 'Z')
         {
             _query += char.ToLowerInvariant((char)key);
-            RefreshHits();
+            RefreshHits(context);
             eaten = 1;
             return TsfHResults.SOk;
         }
@@ -165,7 +185,7 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
             if (_query.Length > 0)
             {
                 _query = _query[..^1];
-                RefreshHits();
+                RefreshHits(context);
             }
             eaten = 1;
             return TsfHResults.SOk;
@@ -247,9 +267,16 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
         }
     }
 
-    private void RefreshHits()
+    private void RefreshHits(nint context)
     {
         _hits = KnowledgeSearchEngine.Search(Volatile.Read(ref _snapshot), _query);
+        if (_hits.Count == 0)
+        {
+            HideCandidates();
+            return;
+        }
+
+        ShowCandidates(context);
     }
 
     private void StartSync()
@@ -323,6 +350,104 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
     {
         _sessionArmed = false;
         ClearQuery();
+        HideCandidates();
+    }
+
+    private void ShowCandidates(nint context)
+    {
+        if (context == 0)
+        {
+            return;
+        }
+
+        SetLastContext(context);
+        var documentManager = GetDocumentManager(context);
+        _candidateList.SetDocumentManager(documentManager);
+        _candidateList.SetItems(_hits.Select(hit => hit.Entry.Question).ToArray());
+
+        if (_uiElementManager is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!_uiElementBegun)
+            {
+                var show = 1;
+                var result = _uiElementManager.BeginUIElement(
+                    _candidateList,
+                    ref show,
+                    out _uiElementId);
+                if (result < 0)
+                {
+                    return;
+                }
+
+                _uiElementBegun = true;
+                _candidateList.SetShown(show != 0);
+            }
+            else
+            {
+                _uiElementManager.UpdateUIElement(_uiElementId);
+            }
+        }
+        catch (COMException)
+        {
+            HideCandidates();
+        }
+    }
+
+    private void HideCandidates()
+    {
+        if (_uiElementBegun && _uiElementManager is not null)
+        {
+            try
+            {
+                _uiElementManager.EndUIElement(_uiElementId);
+            }
+            catch (COMException)
+            {
+            }
+        }
+
+        _uiElementBegun = false;
+        _uiElementId = 0;
+        _candidateList.SetShown(false);
+        _candidateList.SetItems(Array.Empty<string>());
+        _candidateList.SetDocumentManager(0);
+        SetLastContext(0);
+    }
+
+    private void SetLastContext(nint context)
+    {
+        if (_lastContext != 0)
+        {
+            Marshal.Release(_lastContext);
+        }
+
+        _lastContext = context;
+        if (_lastContext != 0)
+        {
+            Marshal.AddRef(_lastContext);
+        }
+    }
+
+    private static nint GetDocumentManager(nint context)
+    {
+        try
+        {
+            var nativeContext = (ITfContextNative)Marshal.GetTypedObjectForIUnknown(
+                context,
+                typeof(ITfContextNative));
+            return nativeContext.GetDocumentMgr(out var documentManager) >= 0
+                ? documentManager
+                : 0;
+        }
+        catch (COMException)
+        {
+            return 0;
+        }
     }
 
     private bool ShouldEatSessionKey(int key)
@@ -356,9 +481,9 @@ public sealed class SoftTalkImeTextService : ITfTextInputProcessor, ITfKeyEventS
             && TsfNativeMethods.IsKeyDown(TsfConstants.VirtualKeyShift);
     }
 
-    private static void ReleaseComObject(object value)
+    private static void ReleaseComObject(object? value)
     {
-        if (Marshal.IsComObject(value))
+        if (value is not null && Marshal.IsComObject(value))
         {
             Marshal.ReleaseComObject(value);
         }

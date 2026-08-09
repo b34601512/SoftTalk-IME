@@ -30,5 +30,11 @@ if ($interopSource -notmatch "AA80E7F7-2021-11D2-93E0-0060B067B86E") {
 if ($interopSource -notmatch "AA80E7F5-2021-11D2-93E0-0060B067B86E") {
     throw "ITfKeyEventSink GUID 未出现在源码中。"
 }
+if ($interopSource -notmatch "EA1EA138-19DF-11D7-A6D2-00065B84435C") {
+    throw "ITfCandidateListUIElement GUID 未出现在源码中。"
+}
+if ($interopSource -notmatch "EA1EA135-19DF-11D7-A6D2-00065B84435C") {
+    throw "ITfUIElementMgr GUID 未出现在源码中。"
+}
 
 Write-Output "TSF_BUILD_VALIDATED: $resolvedPublishDir"
