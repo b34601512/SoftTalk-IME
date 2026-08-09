@@ -1,0 +1,66 @@
+# Python 缓存
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# 虚拟环境和编辑器
+venv/
+.venv/
+env/
+ENV/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 本地配置、密钥和用户数据
+.env
+*.env
+!*.env.example
+*.local
+*.secret
+*.secrets
+*.key
+*.pem
+*.pfx
+*.db
+*.sqlite
+*.sqlite3
+*.stdb
+*.backup
+*.bak
+config.local.*
+
+# 运行目录和缓存
+logs/
+log/
+runtime/
+.runtime/
+cache/
+tmp/
+temp/
+downloads/
+
+# 构建和发布产物
+build/
+dist/
+out/
+release_package/
+release_packages/
+*.exe
+*.dll
+*.zip
+*.7z
+*.rar
+*.msi
+*.log
+*.spec
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
